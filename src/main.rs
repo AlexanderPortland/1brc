@@ -1,48 +1,70 @@
 use core::f64;
-use std::collections::HashMap;
+use std::{collections::HashMap, io::BufRead};
 
 use itertools::Itertools;
-
-mod input;
 
 const FILE_NAME: &str = "measurements.txt";
 
 fn main() {
     // 1. Parse the file into a reader
-    let lines = input::input_csv_lines(FILE_NAME);
-    let measurements = input::measurements_from_lines(lines);
+    let file = std::fs::File::open(FILE_NAME).expect("file could not be opened");
+    // TODO: play w internal buffer capacity
+    let mut reader = std::io::BufReader::new(file);
 
-    // 2. Loop through the file's lines, accumulating information about it
-    let info = get_info(measurements).unwrap();
+    let mut name_buf = Vec::new();
+    let mut temp_buf = Vec::with_capacity(5);
+
+    let mut info = FinalInfo::default();
+
+    loop {
+        name_buf.clear();
+        temp_buf.clear();
+        let name_len = reader.read_until(b';', &mut name_buf).unwrap();
+        if name_len == 0 {
+            break;
+        }
+        let name = &name_buf[..(name_len - 1)];
+
+        let temp_len = reader.read_until(b'\n', &mut temp_buf).unwrap();
+        debug_assert_ne!(temp_len, 0);
+        let temp = &temp_buf[..(temp_len - 1)];
+
+        let measure = Measurement::from_bytes(name, temp);
+
+        // Add to info map.
+        if let Some(existing) = info.get_mut(measure.station_name) {
+            existing.add_measure(measure.measurement);
+        } else {
+            let mut new_record = Record::default();
+            new_record.add_measure(measure.measurement);
+            info.insert(measure.station_name.into(), new_record);
+        }
+    }
 
     // 3. Print out the final information
     print_info(info);
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Measurement {
-    pub station_name: String,
+pub struct Measurement<'a> {
+    pub station_name: &'a [u8],
     // TODO: data oriented design!! make this smaller or use a usize tbh.
     pub measurement: Temperature,
 }
 
-impl Measurement {
-    fn from_string(mut s: String) -> Self {
-        let semi_colon_i = s.find(';').expect("no semicolon!!");
-
-        let measure_str = &s[(semi_colon_i + 1)..];
-        let measurement = Temperature::from_str(measure_str);
-        s.truncate(semi_colon_i);
+impl<'a> Measurement<'a> {
+    fn from_bytes(name: &'a [u8], temp: &[u8]) -> Self {
+        let measurement = Temperature::from_bytes(temp);
 
         Measurement {
-            station_name: s,
+            station_name: name,
             measurement,
         }
     }
 }
 
 // TODO: intern strings?
-type FinalInfo = HashMap<String, Record>;
+type FinalInfo = HashMap<Box<[u8]>, Record>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 /// We can exploit the fact that 'floats' in this problem always have just one decimal for
@@ -53,8 +75,7 @@ impl Temperature {
     const MAX: Self = Self::from_f64(99.9);
     const MIN: Self = Self::from_f64(-99.9);
 
-    fn from_str(s: &str) -> Self {
-        let mut bytes = s.as_bytes();
+    fn from_bytes(mut bytes: &[u8]) -> Self {
         // The length of this string should never be more than 5 (1 negative, 3 digits, 1 decimal).
         debug_assert!(bytes.len() < 5);
         let neg = bytes[0] == b'-';
@@ -96,7 +117,6 @@ impl Temperature {
 }
 
 fn byte_to_num(c: u8) -> i16 {
-    // println!("byte to num {c}");
     (c - 48).into()
 }
 
@@ -167,25 +187,6 @@ impl Record {
     }
 }
 
-fn get_info(
-    measures: impl Iterator<Item = Result<Measurement, std::io::Error>>,
-) -> Result<FinalInfo, std::io::Error> {
-    let mut info = FinalInfo::default();
-
-    for measure in measures {
-        match measure {
-            Ok(measure) => {
-                info.entry(measure.station_name)
-                    .or_default()
-                    .add_measure(measure.measurement);
-            }
-            Err(e) => return Err(e),
-        }
-    }
-
-    Ok(info)
-}
-
 #[allow(clippy::needless_pass_by_value)]
 fn print_info(info: FinalInfo) {
     let mut keys = info.keys().collect::<Box<[_]>>();
@@ -196,6 +197,7 @@ fn print_info(info: FinalInfo) {
         .into_iter()
         .map(|station| {
             let data = &info[station];
+            let station = std::str::from_utf8(station).unwrap();
             format!(
                 "{station}={:.1}/{:.1}/{:.1}",
                 data.min.to_f64(),

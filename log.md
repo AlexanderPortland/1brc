@@ -12,3 +12,5 @@
 `./target/release/obrc > results.txt  86.10s user 3.04s system 98% cpu 1:30.10 total`
 4. directly parse 'floats' as integers
 `./target/release/obrc > results.txt  80.01s user 3.18s system 98% cpu 1:24.30 total`
+5. don't parse strings as utf-8 (until printing them at the very end)
+`./target/release/obrc > results.txt  48.90s user 2.55s system 98% cpu 52.407 total`
