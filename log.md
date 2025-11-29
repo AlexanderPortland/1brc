@@ -10,3 +10,5 @@
 `./target/release/obrc > results.txt  102.73s user 2.96s system 97% cpu 1:47.93 total`
 3. no new string allocations in parsing
 `./target/release/obrc > results.txt  86.10s user 3.04s system 98% cpu 1:30.10 total`
+4. directly parse 'floats' as integers
+`./target/release/obrc > results.txt  80.01s user 3.18s system 98% cpu 1:24.30 total`

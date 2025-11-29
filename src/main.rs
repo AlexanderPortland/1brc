@@ -23,7 +23,7 @@ fn main() {
 pub struct Measurement {
     pub station_name: String,
     // TODO: data oriented design!! make this smaller or use a usize tbh.
-    pub measurement: f64,
+    pub measurement: Temperature,
 }
 
 impl Measurement {
@@ -31,7 +31,7 @@ impl Measurement {
         let semi_colon_i = s.find(';').expect("no semicolon!!");
 
         let measure_str = &s[(semi_colon_i + 1)..];
-        let measurement = measure_str.parse::<f64>().expect("can't parse!!");
+        let measurement = Temperature::from_str(measure_str);
         s.truncate(semi_colon_i);
 
         Measurement {
@@ -44,45 +44,116 @@ impl Measurement {
 // TODO: intern strings?
 type FinalInfo = HashMap<String, Record>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+/// We can exploit the fact that 'floats' in this problem always have just one decimal for
+/// faster parsing and storage
+pub struct Temperature(i16);
+
+impl Temperature {
+    const MAX: Self = Self::from_f64(99.9);
+    const MIN: Self = Self::from_f64(-99.9);
+
+    fn from_str(s: &str) -> Self {
+        let mut bytes = s.as_bytes();
+        // The length of this string should never be more than 5 (1 negative, 3 digits, 1 decimal).
+        debug_assert!(bytes.len() < 5);
+        let neg = bytes[0] == b'-';
+        if neg {
+            bytes = &bytes[1..];
+        }
+
+        debug_assert!(bytes.len() < 4);
+
+        let mut total = 0;
+
+        // TODO: don't love this code pattern, so should fix it,
+        // but for now i think it should be optimized away nicely anyway...
+        total += byte_to_num(bytes[bytes.len() - 1]);
+
+        if bytes.len() >= 3 {
+            total += 10 * byte_to_num(bytes[bytes.len() - 3]);
+        }
+
+        if bytes.len() >= 4 {
+            total += 100 * byte_to_num(bytes[bytes.len() - 4]);
+        }
+
+        if neg {
+            total *= -1;
+        }
+
+        Temperature(total)
+    }
+
+    #[allow(clippy::cast_possible_truncation)]
+    const fn from_f64(f: f64) -> Self {
+        Temperature((f * 10.0) as i16)
+    }
+
+    fn to_f64(self) -> f64 {
+        f64::from(self.0) / 10.0
+    }
+}
+
+fn byte_to_num(c: u8) -> i16 {
+    // println!("byte to num {c}");
+    (c - 48).into()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+/// Using a different big data struct for our accumulators so that the actual data struct
+/// can be very tiny...
+struct BigTemperature(i32);
+
+impl BigTemperature {
+    #[allow(clippy::cast_precision_loss)]
+    const fn to_f64(self) -> f64 {
+        self.0 as f64 / 10.0
+    }
+}
+
+impl std::ops::AddAssign<Temperature> for BigTemperature {
+    fn add_assign(&mut self, rhs: Temperature) {
+        self.0 += i32::from(rhs.0);
+    }
+}
+
 #[derive(Debug)]
 struct Record {
-    min: f64,
+    min: Temperature,
     /// Boolean flag set to mark if the min of this record cannot possibly change anymore.
     minned: bool,
-    max: f64,
+    max: Temperature,
     /// Boolean flag set to mark if the max of this record cannot possibly change anymore.
     maxed: bool,
-    sum: f64,
+    sum: BigTemperature,
     count: usize,
 }
 
 impl Default for Record {
     fn default() -> Self {
         Record {
-            min: f64::MAX,
+            min: Temperature::MAX,
             minned: false,
-            max: f64::MIN,
+            max: Temperature::MIN,
             maxed: false,
-            sum: 0.0,
+            sum: BigTemperature(0),
             count: 0,
         }
     }
 }
 
-const MAX_MEASURE: f64 = 99.9;
-const MIN_MEASURE: f64 = -99.9;
-
 impl Record {
-    fn add_measure(&mut self, measure: f64) {
+    fn add_measure(&mut self, measure: Temperature) {
         if !self.minned && measure < self.min {
             self.min = measure;
-            if self.min == MIN_MEASURE {
+            if self.min == Temperature::MAX {
                 self.minned = true;
             }
         }
         if !self.maxed && measure > self.max {
             self.max = measure;
-            if self.max == MAX_MEASURE {
+            if self.max == Temperature::MIN {
                 self.maxed = true;
             }
         }
@@ -92,7 +163,7 @@ impl Record {
 
     #[allow(clippy::cast_precision_loss)]
     fn mean(&self) -> f64 {
-        self.sum / (self.count as f64)
+        self.sum.to_f64() / (self.count as f64)
     }
 }
 
@@ -127,9 +198,9 @@ fn print_info(info: FinalInfo) {
             let data = &info[station];
             format!(
                 "{station}={:.1}/{:.1}/{:.1}",
-                data.min,
+                data.min.to_f64(),
                 data.mean(),
-                data.max
+                data.max.to_f64()
             )
         })
         .join(", ");
