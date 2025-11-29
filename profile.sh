@@ -1,0 +1,1 @@
+cargo b --profile profiling && samply record ./target/profiling/obrc

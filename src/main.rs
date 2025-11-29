@@ -1,5 +1,5 @@
 use core::f64;
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
 
 use itertools::Itertools;
 
@@ -22,17 +22,22 @@ fn main() {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Measurement {
     pub station_name: String,
+    // TODO: data oriented design!! make this smaller or use a usize tbh.
     pub measurement: f64,
 }
 
-impl FromStr for Measurement {
-    type Err = ();
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (name, measure) = s.split_at(s.find(';').expect("no semicolon!!"));
-        Ok(Measurement {
-            station_name: name.to_string(),
-            measurement: measure[1..].parse().expect("can't parse!!"),
-        })
+impl Measurement {
+    fn from_string(mut s: String) -> Self {
+        let semi_colon_i = s.find(';').expect("no semicolon!!");
+
+        let measure_str = &s[(semi_colon_i + 1)..];
+        let measurement = measure_str.parse::<f64>().expect("can't parse!!");
+        s.truncate(semi_colon_i);
+
+        Measurement {
+            station_name: s,
+            measurement,
+        }
     }
 }
 

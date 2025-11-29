@@ -1,7 +1,6 @@
 use std::{
     io::{self, BufRead},
     path::Path,
-    str::FromStr,
 };
 
 use crate::Measurement;
@@ -18,5 +17,5 @@ pub fn input_csv_lines(
 pub fn measurements_from_lines(
     lines: impl Iterator<Item = Result<String, std::io::Error>>,
 ) -> impl Iterator<Item = Result<Measurement, std::io::Error>> {
-    lines.map(|line| line.map(|string| FromStr::from_str(&string).unwrap()))
+    lines.map(|line| line.map(Measurement::from_string))
 }
