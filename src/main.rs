@@ -41,7 +41,11 @@ type FinalInfo = BTreeMap<String, Record>;
 #[derive(Debug)]
 struct Record {
     min: f64,
+    /// Boolean flag set to mark if the min of this record cannot possibly change anymore.
+    minned: bool,
     max: f64,
+    /// Boolean flag set to mark if the max of this record cannot possibly change anymore.
+    maxed: bool,
     sum: f64,
     count: usize,
 }
@@ -50,20 +54,31 @@ impl Default for Record {
     fn default() -> Self {
         Record {
             min: f64::MAX,
+            minned: false,
             max: f64::MIN,
+            maxed: false,
             sum: 0.0,
             count: 0,
         }
     }
 }
 
+const MAX_MEASURE: f64 = 99.9;
+const MIN_MEASURE: f64 = -99.9;
+
 impl Record {
     fn add_measure(&mut self, measure: f64) {
-        if measure < self.min {
+        if !self.minned && measure < self.min {
             self.min = measure;
+            if self.min == MIN_MEASURE {
+                self.minned = true;
+            }
         }
-        if measure > self.max {
+        if !self.maxed && measure > self.max {
             self.max = measure;
+            if self.max == MAX_MEASURE {
+                self.maxed = true;
+            }
         }
         self.sum += measure;
         self.count += 1;
