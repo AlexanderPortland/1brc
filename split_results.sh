@@ -1,1 +1,0 @@
-tr ',' '\n' < results.txt > results_split.txt

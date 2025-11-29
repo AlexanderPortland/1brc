@@ -1,5 +1,5 @@
 use core::f64;
-use std::{collections::BTreeMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr};
 
 use itertools::Itertools;
 
@@ -36,7 +36,8 @@ impl FromStr for Measurement {
     }
 }
 
-type FinalInfo = BTreeMap<String, Record>;
+// TODO: intern strings?
+type FinalInfo = HashMap<String, Record>;
 
 #[derive(Debug)]
 struct Record {
@@ -109,10 +110,16 @@ fn get_info(
     Ok(info)
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn print_info(info: FinalInfo) {
-    let s = info
+    let mut keys = info.keys().collect::<Box<[_]>>();
+    // Sort to ensure station names are presented in order.
+    keys.sort_unstable();
+
+    let s = keys
         .into_iter()
-        .map(|(station, data)| {
+        .map(|station| {
+            let data = &info[station];
             format!(
                 "{station}={:.1}/{:.1}/{:.1}",
                 data.min,
