@@ -1,7 +1,9 @@
 use core::f64;
-use std::{collections::HashMap, io::BufRead};
+use std::io::BufRead;
 
 use itertools::Itertools;
+
+mod intern;
 
 const FILE_NAME: &str = "measurements.txt";
 
@@ -13,6 +15,7 @@ fn main() {
 
     let mut name_buf = Vec::new();
     let mut temp_buf = Vec::with_capacity(5);
+    let mut interner = intern::Interner::default();
 
     let mut info = FinalInfo::default();
 
@@ -23,7 +26,7 @@ fn main() {
         if name_len == 0 {
             break;
         }
-        let name = &name_buf[..(name_len - 1)];
+        let name = interner.intern(&name_buf[..(name_len - 1)]);
 
         let temp_len = reader.read_until(b'\n', &mut temp_buf).unwrap();
         debug_assert_ne!(temp_len, 0);
@@ -37,23 +40,23 @@ fn main() {
         } else {
             let mut new_record = Record::default();
             new_record.add_measure(measure.measurement);
-            info.insert(measure.station_name.into(), new_record);
+            info.insert(measure.station_name, new_record);
         }
     }
 
     // 3. Print out the final information
-    print_info(info);
+    print_info(info, interner);
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Measurement<'a> {
-    pub station_name: &'a [u8],
+pub struct Measurement {
+    pub station_name: intern::InternedName,
     // TODO: data oriented design!! make this smaller or use a usize tbh.
     pub measurement: Temperature,
 }
 
-impl<'a> Measurement<'a> {
-    fn from_bytes(name: &'a [u8], temp: &[u8]) -> Self {
+impl Measurement {
+    fn from_bytes(name: intern::InternedName, temp: &[u8]) -> Self {
         let measurement = Temperature::from_bytes(temp);
 
         Measurement {
@@ -64,7 +67,27 @@ impl<'a> Measurement<'a> {
 }
 
 // TODO: intern strings?
-type FinalInfo = HashMap<Box<[u8]>, Record>;
+#[derive(Debug, Default)]
+struct FinalInfo(Vec<Record>);
+
+impl FinalInfo {
+    pub fn get_mut(
+        &mut self,
+        name: impl std::borrow::Borrow<intern::InternedName>,
+    ) -> Option<&mut Record> {
+        self.0.get_mut(name.borrow().0)
+    }
+
+    pub fn get(&self, name: impl std::borrow::Borrow<intern::InternedName>) -> Option<&Record> {
+        self.0.get(name.borrow().0)
+    }
+
+    pub fn insert(&mut self, name: impl std::borrow::Borrow<intern::InternedName>, val: Record) {
+        let name = name.borrow();
+        debug_assert_eq!(name.0, self.0.len());
+        self.0.push(val);
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 /// We can exploit the fact that 'floats' in this problem always have just one decimal for
@@ -188,16 +211,15 @@ impl Record {
 }
 
 #[allow(clippy::needless_pass_by_value)]
-fn print_info(info: FinalInfo) {
-    let mut keys = info.keys().collect::<Box<[_]>>();
+fn print_info(info: FinalInfo, interner: intern::Interner) {
+    let mut keys = interner.into_iter().collect::<Box<[_]>>();
     // Sort to ensure station names are presented in order.
-    keys.sort_unstable();
+    keys.sort_by(|a, b| a.1.cmp(&b.1));
 
     let s = keys
         .into_iter()
-        .map(|station| {
-            let data = &info[station];
-            let station = std::str::from_utf8(station).unwrap();
+        .map(|(interned, station)| {
+            let data = info.get(interned).unwrap();
             format!(
                 "{station}={:.1}/{:.1}/{:.1}",
                 data.min.to_f64(),

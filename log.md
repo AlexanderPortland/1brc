@@ -14,3 +14,5 @@
 `./target/release/obrc > results.txt  80.01s user 3.18s system 98% cpu 1:24.30 total`
 5. don't parse strings as utf-8 (until printing them at the very end)
 `./target/release/obrc > results.txt  48.90s user 2.55s system 98% cpu 52.407 total`
+
+./target/release/obrc > results.txt  46.95s user 2.64s system 97% cpu 50.684 total
