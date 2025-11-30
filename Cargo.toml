@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.100"
 itertools = "0.14.0"
+rustc_data_structures = "0.1.2"
 
 # [profile.release]
 # lto = "fat"

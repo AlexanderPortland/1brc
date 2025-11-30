@@ -1,5 +1,5 @@
 use core::f64;
-use std::{collections::HashMap, io::BufRead};
+use std::io::BufRead;
 
 use itertools::Itertools;
 
@@ -32,6 +32,11 @@ fn main() {
         let measure = Measurement::from_bytes(name, temp);
 
         // Add to info map.
+        // println!(
+        //     "station name is {:?} ({})",
+        //     measure.station_name,
+        //     measure.station_name.len()
+        // );
         if let Some(existing) = info.get_mut(measure.station_name) {
             existing.add_measure(measure.measurement);
         } else {
@@ -64,7 +69,7 @@ impl<'a> Measurement<'a> {
 }
 
 // TODO: intern strings?
-type FinalInfo = HashMap<Box<[u8]>, Record>;
+type FinalInfo = rustc_data_structures::fx::FxHashMap<Box<[u8]>, Record>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 /// We can exploit the fact that 'floats' in this problem always have just one decimal for
