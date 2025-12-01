@@ -1,18 +1,57 @@
 use core::f64;
-use std::io::BufRead;
+use std::io::{BufRead, Read, Seek};
 
 use itertools::Itertools;
 
 const FILE_NAME: &str = "measurements.txt";
+const NUM_THREADS: u64 = 12;
 
 fn main() {
+    let file_len = std::fs::metadata(FILE_NAME).unwrap().len();
+    let per_thread = file_len / NUM_THREADS;
+
+    let threads = (0..NUM_THREADS)
+        .map(|thread_id| {
+            std::thread::spawn(move || {
+                let start_offset = thread_id * per_thread;
+                read_file(start_offset, per_thread)
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let infos = threads
+        .into_iter()
+        .map(|a| a.join().unwrap())
+        .collect::<Vec<_>>();
+    let info = join_infos(infos);
+    print_info(info);
+}
+
+fn read_file(start_offset: u64, bytes: u64) -> FinalInfo {
     // 1. Parse the file into a reader
     let file = std::fs::File::open(FILE_NAME).expect("file could not be opened");
-    // TODO: play w internal buffer capacity
-    let mut reader = std::io::BufReader::new(file);
 
     let mut name_buf = Vec::new();
     let mut temp_buf = Vec::with_capacity(5);
+    let mut bytes_read = 0;
+
+    let mut reader = std::io::BufReader::new(file);
+    if start_offset == 0 {
+        // just start at the beginning
+        reader.seek(std::io::SeekFrom::Start(start_offset)).unwrap();
+    } else {
+        // check if the byte right before us is a '\n'
+        reader
+            .seek(std::io::SeekFrom::Start(start_offset - 1))
+            .unwrap();
+        let mut prev_byte = [0];
+        reader.read_exact(&mut prev_byte).unwrap();
+        if prev_byte[0] != b'\n' {
+            // we aren't just past the end of a line, so someone else will take care of this,
+            // read to the next line and start there...
+            bytes_read += reader.read_until(b'\n', &mut temp_buf).unwrap();
+        }
+    }
 
     let mut info = FinalInfo::default();
 
@@ -20,23 +59,20 @@ fn main() {
         name_buf.clear();
         temp_buf.clear();
         let name_len = reader.read_until(b';', &mut name_buf).unwrap();
+        bytes_read += name_len;
         if name_len == 0 {
             break;
         }
         let name = &name_buf[..(name_len - 1)];
 
         let temp_len = reader.read_until(b'\n', &mut temp_buf).unwrap();
+        bytes_read += temp_len;
         debug_assert_ne!(temp_len, 0);
         let temp = &temp_buf[..(temp_len - 1)];
 
         let measure = Measurement::from_bytes(name, temp);
 
         // Add to info map.
-        // println!(
-        //     "station name is {:?} ({})",
-        //     measure.station_name,
-        //     measure.station_name.len()
-        // );
         if let Some(existing) = info.get_mut(measure.station_name) {
             existing.add_measure(measure.measurement);
         } else {
@@ -44,10 +80,13 @@ fn main() {
             new_record.add_measure(measure.measurement);
             info.insert(measure.station_name.into(), new_record);
         }
+
+        if (bytes_read as u64) >= bytes {
+            break;
+        }
     }
 
-    // 3. Print out the final information
-    print_info(info);
+    info
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -168,6 +207,17 @@ impl Default for Record {
     }
 }
 
+impl std::ops::AddAssign<Record> for Record {
+    fn add_assign(&mut self, rhs: Record) {
+        self.count += rhs.count;
+        self.sum.0 += rhs.sum.0;
+        self.max = std::cmp::max(self.max, rhs.max);
+        self.maxed = std::cmp::max(self.maxed, rhs.maxed);
+        self.min = std::cmp::min(self.min, rhs.min);
+        self.minned = std::cmp::max(self.minned, rhs.minned);
+    }
+}
+
 impl Record {
     fn add_measure(&mut self, measure: Temperature) {
         if !self.minned && measure < self.min {
@@ -190,6 +240,16 @@ impl Record {
     fn mean(&self) -> f64 {
         self.sum.to_f64() / (self.count as f64)
     }
+}
+
+fn join_infos(mut infos: Vec<FinalInfo>) -> FinalInfo {
+    let mut first = infos.pop().unwrap();
+    while let Some(next) = infos.pop() {
+        for (s, record) in next {
+            *first.entry(s).or_default() += record;
+        }
+    }
+    first
 }
 
 #[allow(clippy::needless_pass_by_value)]

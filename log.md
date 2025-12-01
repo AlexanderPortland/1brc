@@ -16,3 +16,5 @@
 `./target/release/obrc > results.txt  48.90s user 2.55s system 98% cpu 52.407 total`
 6. better hash functions (fxhash for now, but should revisit)
 `./target/release/obrc > results.txt  42.98s user 2.45s system 98% cpu 46.321 total`
+7. multithreaded file reading
+`./target/release/obrc > results.txt  52.80s user 14.06s system 366% cpu 18.240 total`
