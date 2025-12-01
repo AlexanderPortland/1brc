@@ -212,6 +212,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "itertools",
+ "libc",
  "rustc_data_structures",
 ]
 

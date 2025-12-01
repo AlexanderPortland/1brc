@@ -1,20 +1,27 @@
-use core::f64;
-use std::io::{BufRead, Read, Seek};
+#![allow(internal_features)]
+#![feature(slice_internals)]
+use core::{f64, slice::memchr::memchr};
 
 use itertools::Itertools;
+
+mod input;
 
 const FILE_NAME: &str = "measurements.txt";
 const NUM_THREADS: u64 = 12;
 
 fn main() {
-    let file_len = std::fs::metadata(FILE_NAME).unwrap().len();
+    let (file_mem, file_len) = input::initialize_file(FILE_NAME);
     let per_thread = file_len / NUM_THREADS;
 
     let threads = (0..NUM_THREADS)
         .map(|thread_id| {
             std::thread::spawn(move || {
                 let start_offset = thread_id * per_thread;
-                read_file(start_offset, per_thread)
+                read_file(
+                    usize::try_from(start_offset).unwrap(),
+                    usize::try_from(per_thread).unwrap(),
+                    file_mem,
+                )
             })
         })
         .collect::<Vec<_>>();
@@ -27,48 +34,34 @@ fn main() {
     print_info(info);
 }
 
-fn read_file(start_offset: u64, bytes: u64) -> FinalInfo {
+const NEWLINE: u8 = b'\n';
+const NAME_SEP: u8 = b';';
+
+fn read_file(start_offset: usize, bytes: usize, file_mem: &[u8]) -> FinalInfo {
     // 1. Parse the file into a reader
-    let file = std::fs::File::open(FILE_NAME).expect("file could not be opened");
+    let mut offset = start_offset;
 
-    let mut name_buf = Vec::new();
-    let mut temp_buf = Vec::with_capacity(5);
-    let mut bytes_read = 0;
-
-    let mut reader = std::io::BufReader::new(file);
-    if start_offset == 0 {
-        // just start at the beginning
-        reader.seek(std::io::SeekFrom::Start(start_offset)).unwrap();
-    } else {
+    if offset != 0 {
         // check if the byte right before us is a '\n'
-        reader
-            .seek(std::io::SeekFrom::Start(start_offset - 1))
-            .unwrap();
-        let mut prev_byte = [0];
-        reader.read_exact(&mut prev_byte).unwrap();
-        if prev_byte[0] != b'\n' {
-            // we aren't just past the end of a line, so someone else will take care of this,
-            // read to the next line and start there...
-            bytes_read += reader.read_until(b'\n', &mut temp_buf).unwrap();
+        if file_mem[offset - 1] != NEWLINE {
+            let to_next_nl =
+                memchr(NEWLINE, &file_mem[offset..]).expect("should handle this properly");
+            offset += to_next_nl + 1;
         }
     }
 
     let mut info = FinalInfo::default();
 
     loop {
-        name_buf.clear();
-        temp_buf.clear();
-        let name_len = reader.read_until(b';', &mut name_buf).unwrap();
-        bytes_read += name_len;
-        if name_len == 0 {
+        let Some(name_len) = memchr(NAME_SEP, &file_mem[offset..]) else {
             break;
-        }
-        let name = &name_buf[..(name_len - 1)];
+        };
+        let name = &file_mem[offset..(offset + name_len)];
 
-        let temp_len = reader.read_until(b'\n', &mut temp_buf).unwrap();
-        bytes_read += temp_len;
-        debug_assert_ne!(temp_len, 0);
-        let temp = &temp_buf[..(temp_len - 1)];
+        let temp_start = offset + name_len + 1;
+        let temp_len = memchr(NEWLINE, &file_mem[temp_start..])
+            .expect("should always have corresponding temp");
+        let temp = &file_mem[temp_start..(temp_start + temp_len)];
 
         let measure = Measurement::from_bytes(name, temp);
 
@@ -81,7 +74,9 @@ fn read_file(start_offset: u64, bytes: u64) -> FinalInfo {
             info.insert(measure.station_name.into(), new_record);
         }
 
-        if (bytes_read as u64) >= bytes {
+        offset = temp_start + temp_len + 1;
+
+        if offset >= (start_offset + bytes) {
             break;
         }
     }

@@ -18,3 +18,10 @@
 `./target/release/obrc > results.txt  42.98s user 2.45s system 98% cpu 46.321 total`
 7. multithreaded file reading
 `./target/release/obrc > results.txt  52.80s user 14.06s system 366% cpu 18.240 total`
+8. mmap file & use slices directly from that shared buffer
+`./target/release/obrc > results.txt  38.28s user 10.80s system 276% cpu 17.735 total` <- significant usertime reduction, but still bad overall time because we're not able to use the extra CPU effectively -- we're just waiting on page-ins of data from the file.
+
+
+# To try
+- [ ] memory mapped IO
+- [ ] simd operations for finding newlines faster (are comparisons much faster w that?)
