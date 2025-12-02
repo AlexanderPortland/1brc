@@ -37,6 +37,9 @@ fn main() {
 const NEWLINE: u8 = b'\n';
 const NAME_SEP: u8 = b';';
 
+const MAX_NAME_LEN: usize = 100;
+const MAX_TEMP_LEN: usize = 5;
+
 fn read_file(start_offset: usize, bytes: usize, file_mem: &[u8]) -> FinalInfo {
     // 1. Parse the file into a reader
     let mut offset = start_offset;
@@ -53,14 +56,20 @@ fn read_file(start_offset: usize, bytes: usize, file_mem: &[u8]) -> FinalInfo {
     let mut info = FinalInfo::default();
 
     loop {
-        let Some(name_len) = memchr(NAME_SEP, &file_mem[offset..]) else {
+        let Some(name_len) = memchr(
+            NAME_SEP,
+            &file_mem[offset..std::cmp::min(offset + MAX_NAME_LEN + 1, file_mem.len())],
+        ) else {
             break;
         };
         let name = &file_mem[offset..(offset + name_len)];
 
         let temp_start = offset + name_len + 1;
-        let temp_len = memchr(NEWLINE, &file_mem[temp_start..])
-            .expect("should always have corresponding temp");
+        let temp_len = memchr(
+            NEWLINE,
+            &file_mem[temp_start..std::cmp::min(temp_start + MAX_TEMP_LEN + 1, file_mem.len())],
+        )
+        .expect("should always have corresponding temp");
         let temp = &file_mem[temp_start..(temp_start + temp_len)];
 
         let measure = Measurement::from_bytes(name, temp);

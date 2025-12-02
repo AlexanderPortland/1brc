@@ -1,5 +1,6 @@
 # Reference solution
 `./target/release/rs-1brc ../measurements.txt > ref.txt  57.07s user 2.79s system 703% cpu 8.507 total`
+`./target/release/brrr > results.txt  59.34s user 9.87s system 281% cpu 24.558 total` jonhoo's code on my machine as of `create readme` commit
 
 # My solution progress
 * baseline
@@ -19,7 +20,9 @@
 7. multithreaded file reading
 `./target/release/obrc > results.txt  52.80s user 14.06s system 366% cpu 18.240 total`
 8. mmap file & use slices directly from that shared buffer
-`./target/release/obrc > results.txt  38.28s user 10.80s system 276% cpu 17.735 total` <- significant usertime reduction, but still bad overall time because we're not able to use the extra CPU effectively -- we're just waiting on page-ins of data from the file.
+`./target/release/obrc > results.txt  35.92s user 10.39s system 298% cpu 15.519 total` <- significant usertime reduction, but still bad overall time because we're not able to use the extra CPU effectively -- we're just waiting on page-ins of data from the file.
+9. only look for next delimiter within relevant subslice (seems to let it choose the best search strategy accordingly)
+``
 
 
 # To try

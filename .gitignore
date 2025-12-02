@@ -6,6 +6,7 @@ measurements.txt
 
 # Ignore the reference implementation
 reference
+brrr
 
 # Ignore profiling information
 **.json.gz
